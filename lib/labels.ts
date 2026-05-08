@@ -7,7 +7,21 @@ export const statusLabels: Record<TaskStatus, string> = {
   done: "Дууссан"
 };
 
+export const shortStatusLabels: Record<TaskStatus, string> = {
+  new: "Шинэ",
+  in_progress: "Явц",
+  blocked: "Гацсан",
+  done: "Дууссан"
+};
+
 export const priorityLabels: Record<Priority, string> = {
+  low: "Бага",
+  normal: "Энгийн",
+  high: "Өндөр",
+  urgent: "Яаралтай"
+};
+
+export const shortPriorityLabels: Record<Priority, string> = {
   low: "Бага",
   normal: "Энгийн",
   high: "Өндөр",

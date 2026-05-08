@@ -1,9 +1,18 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Plus, Search } from "lucide-react";
-import { CategoryBadge } from "@/components/tasks/category-badge";
-import { PriorityBadge } from "@/components/tasks/priority-badge";
+import {
+  AlertTriangle,
+  CalendarDays,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Circle,
+  Clock3,
+  List,
+  Plus,
+  Search,
+  SlidersHorizontal
+} from "lucide-react";
 import { TaskCard } from "@/components/tasks/task-card";
-import { TaskStatusBadge } from "@/components/tasks/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -14,6 +23,7 @@ import { priorityLabels, statusLabels, taskCategories } from "@/lib/labels";
 import { isAdmin } from "@/lib/permissions";
 import { cn, formatDate, isOverdue } from "@/lib/utils";
 import type { Priority, Profile, TaskStatus, TaskWithRelations } from "@/lib/types";
+import type { LucideIcon } from "lucide-react";
 
 type Params = {
   status?: TaskStatus;
@@ -39,7 +49,7 @@ export default async function TasksPage({
     supabase
       .from("tasks")
       .select(
-        "*, task_assignments(teacher_id, profiles(id,full_name,avatar_url,role,created_at,updated_at))"
+        "id,title,description,status,priority,category,start_date,due_date,sequence_order,created_by,created_at,updated_at,task_assignments(teacher_id,profiles(id,full_name,avatar_url,role,created_at,updated_at))"
       )
       .order("sequence_order", { ascending: true })
       .order("due_date", { ascending: true, nullsFirst: false }),
@@ -65,19 +75,17 @@ export default async function TasksPage({
   });
 
   const view = params.view || "list";
-  const monthBase = params.month ? new Date(`${params.month}-01`) : new Date();
-  const selectedDay = params.day || new Date().toISOString().slice(0, 10);
+  const monthBase = params.month ? new Date(`${params.month}-01T00:00:00`) : new Date();
+  const selectedDay = params.day || dateKey(new Date());
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-5 sm:space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-3xl font-semibold tracking-normal text-slate-950">
-            {admin ? "Бүх ажлууд" : "Миний ажлууд"}
+          <h2 className="text-2xl font-semibold tracking-normal text-slate-950 sm:text-3xl">
+            {admin ? "Бүх ажил" : "Миний ажлууд"}
           </h2>
-          <p className="mt-2 text-slate-500">
-            Ажлаа жагсаалтаар эсвэл календарь дээрээс хурдан харна.
-          </p>
+          <p className="mt-1 text-sm text-slate-500">Жагсаалт эсвэл календарь.</p>
         </div>
         {admin ? (
           <Button asChild>
@@ -89,7 +97,16 @@ export default async function TasksPage({
         ) : null}
       </div>
 
-      <Card>
+      <div className="flex gap-2 overflow-x-auto pb-1 md:hidden">
+        <QuickIcon href={buildHref(params, { view, status: undefined })} active={!params.status} label="Бүгд" icon={SlidersHorizontal} />
+        <QuickIcon href={buildHref(params, { view, status: "new" })} active={params.status === "new"} label="Шинэ" icon={Circle} />
+        <QuickIcon href={buildHref(params, { view, status: "in_progress" })} active={params.status === "in_progress"} label="Явц" icon={Clock3} />
+        <QuickIcon href={buildHref(params, { view, status: "blocked" })} active={params.status === "blocked"} label="Гацсан" icon={AlertTriangle} />
+        <QuickIcon href={buildHref(params, { view, status: "done" })} active={params.status === "done"} label="Дууссан" icon={CheckCircle2} />
+        <QuickIcon href={buildHref(params, { view: view === "list" ? "calendar" : "list" })} active={false} label={view === "list" ? "Календарь" : "Жагсаалт"} icon={view === "list" ? CalendarDays : List} />
+      </div>
+
+      <Card className="hidden md:block">
         <div className="mb-5 flex flex-wrap gap-2">
           <Button asChild variant={view === "list" ? "default" : "outline"}>
             <Link href={buildHref(params, { view: "list" })}>Жагсаалт</Link>
@@ -100,7 +117,7 @@ export default async function TasksPage({
         </div>
         <CardHeader>
           <CardTitle>Шүүлтүүр</CardTitle>
-          <CardDescription>Төлөв, төрөл, багш, хайлтаар нарийсгана.</CardDescription>
+          <CardDescription>Төлөв, төрөл, багш, хайлт.</CardDescription>
         </CardHeader>
         <form className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
           <input type="hidden" name="view" value={view} />
@@ -157,6 +174,26 @@ export default async function TasksPage({
   );
 }
 
+function QuickIcon({
+  href,
+  active,
+  label,
+  icon: Icon
+}: {
+  href: string;
+  active: boolean;
+  label: string;
+  icon: LucideIcon;
+}) {
+  return (
+    <Button asChild size="icon" variant={active ? "default" : "outline"} className="shrink-0" title={label}>
+      <Link href={href} aria-label={label}>
+        <Icon className="h-4 w-4" />
+      </Link>
+    </Button>
+  );
+}
+
 function ListView({ tasks }: { tasks: TaskWithRelations[] }) {
   const groups = groupTasks(tasks);
   const entries = Object.entries(groups).filter(([, items]) => items.length > 0);
@@ -166,11 +203,16 @@ function ListView({ tasks }: { tasks: TaskWithRelations[] }) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {entries.map(([title, items]) => (
-        <section key={title} className="space-y-4">
-          <h3 className="text-xl font-semibold text-slate-950">{title}</h3>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <section key={title} className="space-y-2">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold text-slate-950 sm:text-lg">{title}</h3>
+            <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-500 shadow-soft">
+              {items.length}
+            </span>
+          </div>
+          <div className="space-y-2">
             {items.map((task) => (
               <TaskCard key={task.id} task={task} />
             ))}
@@ -194,19 +236,19 @@ function CalendarView({
 }) {
   const days = calendarDays(month);
   const selectedTasks = tasks.filter((task) => task.due_date === selectedDay);
-  const previousMonth = addMonths(month, -1).toISOString().slice(0, 7);
-  const nextMonth = addMonths(month, 1).toISOString().slice(0, 7);
+  const previousMonth = monthKey(addMonths(month, -1));
+  const nextMonth = monthKey(addMonths(month, 1));
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
-      <Card>
-        <div className="mb-5 flex items-center justify-between">
+    <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+      <Card className="p-3 sm:p-6">
+        <div className="mb-4 flex items-center justify-between">
           <Button asChild variant="outline" size="icon">
             <Link href={buildHref(params, { view: "calendar", month: previousMonth })}>
               <ChevronLeft className="h-4 w-4" />
             </Link>
           </Button>
-          <h3 className="text-xl font-semibold text-slate-950">
+          <h3 className="text-base font-semibold text-slate-950 sm:text-xl">
             {new Intl.DateTimeFormat("mn-MN", { year: "numeric", month: "long" }).format(month)}
           </h3>
           <Button asChild variant="outline" size="icon">
@@ -215,38 +257,46 @@ function CalendarView({
             </Link>
           </Button>
         </div>
-        <div className="grid grid-cols-7 gap-2 text-center text-xs font-medium text-slate-400">
+        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-slate-400 sm:gap-2 sm:text-xs">
           {["Да", "Мя", "Лх", "Пү", "Ба", "Бя", "Ня"].map((day) => (
             <div key={day}>{day}</div>
           ))}
         </div>
-        <div className="mt-3 grid grid-cols-7 gap-2">
+        <div className="mt-2 grid grid-cols-7 gap-1 sm:gap-2">
           {days.map((day) => {
-            const dateKey = day.toISOString().slice(0, 10);
-            const dayTasks = tasks.filter((task) => task.due_date === dateKey);
+            const key = dateKey(day);
+            const dayTasks = tasks.filter((task) => task.due_date === key);
             const done = dayTasks.filter((task) => task.status === "done").length;
             const unresolved = dayTasks.length - done;
             const inMonth = day.getMonth() === month.getMonth();
             return (
               <Link
-                key={dateKey}
+                key={key}
                 href={buildHref(params, {
                   view: "calendar",
-                  month: month.toISOString().slice(0, 7),
-                  day: dateKey
+                  month: monthKey(month),
+                  day: key
                 })}
                 className={cn(
-                  "min-h-24 rounded-2xl border bg-white p-2 text-left transition hover:border-indigo-200 hover:bg-indigo-50",
-                  !inMonth && "opacity-40",
-                  selectedDay === dateKey && "border-indigo-400 bg-indigo-50"
+                  "min-h-16 rounded-xl border bg-white p-1.5 text-left transition hover:border-indigo-200 hover:bg-indigo-50 sm:min-h-24 sm:rounded-2xl sm:p-2",
+                  !inMonth && "opacity-35",
+                  selectedDay === key && "border-indigo-400 bg-indigo-50"
                 )}
               >
-                <p className="font-medium text-slate-950">{day.getDate()}</p>
+                <p className="text-xs font-medium text-slate-950 sm:text-sm">{day.getDate()}</p>
                 {dayTasks.length ? (
-                  <div className="mt-2 space-y-1 text-[11px]">
-                    <p className="text-slate-500">Нийт: {dayTasks.length}</p>
-                    <p className="text-emerald-600">Дууссан: {done}</p>
-                    <p className="text-amber-600">Үлдсэн: {unresolved}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-1 text-[10px] sm:text-[11px]">
+                    <span className="rounded-full bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">
+                      {dayTasks.length}
+                    </span>
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-1 py-0.5 font-medium text-emerald-700">
+                      <CheckCircle2 className="h-3 w-3" />
+                      {done}
+                    </span>
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 px-1 py-0.5 font-medium text-amber-700">
+                      <Circle className="h-3 w-3" />
+                      {unresolved}
+                    </span>
                   </div>
                 ) : null}
               </Link>
@@ -257,26 +307,19 @@ function CalendarView({
 
       <Card>
         <CardHeader>
-          <CardTitle>Сонгосон өдрийн ажлууд</CardTitle>
+          <CardTitle>Сонгосон өдөр</CardTitle>
           <CardDescription>{formatDate(selectedDay)}</CardDescription>
         </CardHeader>
-        <div className="mb-4 grid grid-cols-2 gap-2 text-sm">
-          <Summary label="Нийт ажил" value={selectedTasks.length} />
-          <Summary label="Дууссан" value={selectedTasks.filter((task) => task.status === "done").length} />
-          <Summary label="Хийгдэж байна" value={selectedTasks.filter((task) => task.status === "in_progress").length} />
-          <Summary label="Гацсан" value={selectedTasks.filter((task) => task.status === "blocked").length} />
-          <Summary label="Шийдэгдээгүй" value={selectedTasks.filter((task) => task.status !== "done").length} />
+        <div className="mb-4 grid grid-cols-5 gap-2 text-center text-sm">
+          <Summary icon={List} value={selectedTasks.length} label="Нийт" />
+          <Summary icon={CheckCircle2} value={selectedTasks.filter((task) => task.status === "done").length} label="Дууссан" />
+          <Summary icon={Clock3} value={selectedTasks.filter((task) => task.status === "in_progress").length} label="Явц" />
+          <Summary icon={AlertTriangle} value={selectedTasks.filter((task) => task.status === "blocked").length} label="Гацсан" />
+          <Summary icon={Circle} value={selectedTasks.filter((task) => task.status !== "done").length} label="Үлдсэн" />
         </div>
-        <div className="space-y-3">
+        <div className="space-y-2">
           {selectedTasks.map((task) => (
-            <Link key={task.id} href={`/tasks/${task.id}`} className="block rounded-3xl bg-slate-50 p-4">
-              <div className="flex flex-wrap gap-2">
-                <TaskStatusBadge status={task.status} />
-                <PriorityBadge priority={task.priority} />
-                <CategoryBadge category={task.category} />
-              </div>
-              <p className="mt-3 font-medium text-slate-950">{task.title}</p>
-            </Link>
+            <TaskCard key={task.id} task={task} />
           ))}
           {!selectedTasks.length ? <p className="text-sm text-slate-500">Энэ өдөр ажил алга.</p> : null}
         </div>
@@ -285,11 +328,21 @@ function CalendarView({
   );
 }
 
-function Summary({ label, value }: { label: string; value: number }) {
+function Summary({
+  icon: Icon,
+  value,
+  label
+}: {
+  icon: LucideIcon;
+  value: number;
+  label: string;
+}) {
   return (
-    <div className="rounded-2xl bg-slate-50 p-3">
-      <p className="text-xs text-slate-400">{label}</p>
-      <p className="mt-1 text-lg font-semibold text-slate-950">{value}</p>
+    <div className="rounded-2xl bg-slate-50 p-2">
+      <Icon className="mx-auto h-4 w-4 text-indigo-500" />
+      <p className="mt-1 text-lg font-semibold leading-none text-slate-950">{value}</p>
+      <p className="mt-1 hidden text-[11px] text-slate-400 sm:block">{label}</p>
+      <span className="sr-only">{label}</span>
     </div>
   );
 }
@@ -303,10 +356,10 @@ function groupTasks(tasks: TaskWithRelations[]) {
   weekEnd.setDate(today.getDate() + 7);
 
   return {
-    "Хугацаа хэтэрсэн": tasks.filter((task) => task.status !== "done" && isOverdue(task.due_date)),
+    "Хэтэрсэн": tasks.filter((task) => task.status !== "done" && isOverdue(task.due_date)),
     "Өнөөдөр": tasks.filter((task) => sameDate(task.due_date, today) && task.status !== "done"),
     "Маргааш": tasks.filter((task) => sameDate(task.due_date, tomorrow) && task.status !== "done"),
-    "Энэ 7 хоног": tasks.filter((task) => {
+    "7 хоног": tasks.filter((task) => {
       if (!task.due_date || task.status === "done") return false;
       const due = new Date(task.due_date);
       return due > tomorrow && due <= weekEnd;
@@ -317,7 +370,7 @@ function groupTasks(tasks: TaskWithRelations[]) {
 }
 
 function sameDate(value: string | null, date: Date) {
-  return value === date.toISOString().slice(0, 10);
+  return value === dateKey(date);
 }
 
 function calendarDays(month: Date) {
@@ -334,6 +387,17 @@ function calendarDays(month: Date) {
 
 function addMonths(date: Date, amount: number) {
   return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+}
+
+function dateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function monthKey(date: Date) {
+  return dateKey(date).slice(0, 7);
 }
 
 function buildHref(params: Params, patch: Partial<Params>) {
