@@ -1,24 +1,32 @@
+import Link from "next/link";
 import { updateProfileAction } from "@/lib/actions/profile";
 import { getSessionProfile } from "@/lib/auth/session";
+import { isAdmin } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
 export default async function ProfileSettingsPage() {
   const { profile } = await getSessionProfile();
+  const admin = isAdmin(profile);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <h2 className="text-3xl font-semibold tracking-normal text-slate-950">Профайл</h2>
-        <p className="mt-2 text-slate-500">Өөрийн нэр болон зурагны холбоосыг шинэчилнэ.</p>
+    <div className="mx-auto max-w-2xl space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-normal text-slate-950 sm:text-3xl">Профайл</h2>
+          <p className="mt-1 text-sm text-slate-500">Нэр, avatar.</p>
+        </div>
+        {admin ? (
+          <Button asChild variant="outline">
+            <Link href="/settings/groups">Багууд</Link>
+          </Button>
+        ) : null}
       </div>
       <Card>
         <CardHeader>
           <CardTitle>Миний мэдээлэл</CardTitle>
-          <CardDescription>
-            Энэ нэр ажлын хариуцагч, сэтгэгдэл, профайл дээр харагдана.
-          </CardDescription>
+          <CardDescription>Ажил, comment дээр харагдана.</CardDescription>
         </CardHeader>
         <form action={updateProfileAction} className="space-y-4">
           <label className="space-y-2">

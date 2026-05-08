@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { getSessionProfile, requireAdmin } from "@/lib/auth/session";
 import type { TaskStatus } from "@/lib/types";
@@ -20,6 +21,28 @@ const taskSchema = z.object({
 function value(formData: FormData, key: string) {
   const raw = formData.get(key);
   return typeof raw === "string" ? raw.trim() : "";
+}
+
+async function resolveAssigneeIds(supabase: SupabaseClient, formData: FormData) {
+  const directIds = formData
+    .getAll("teacher_ids")
+    .filter((item): item is string => typeof item === "string" && item.length > 0);
+  const groupIds = formData
+    .getAll("group_ids")
+    .filter((item): item is string => typeof item === "string" && item.length > 0);
+
+  if (!groupIds.length) return [...new Set(directIds)];
+
+  const { data } = await supabase
+    .from("teacher_group_members")
+    .select("teacher_id")
+    .in("group_id", groupIds);
+
+  const groupTeacherIds = (data || [])
+    .map((item: { teacher_id: string }) => item.teacher_id)
+    .filter(Boolean);
+
+  return [...new Set([...directIds, ...groupTeacherIds])];
 }
 
 export async function createTaskAction(formData: FormData) {
@@ -51,9 +74,7 @@ export async function createTaskAction(formData: FormData) {
     throw new Error(error?.message || "Ажил үүсгэж чадсангүй.");
   }
 
-  const teacherIds = formData
-    .getAll("teacher_ids")
-    .filter((item): item is string => typeof item === "string" && item.length > 0);
+  const teacherIds = await resolveAssigneeIds(supabase, formData);
 
   if (teacherIds.length) {
     await supabase.from("task_assignments").insert(
@@ -74,36 +95,6 @@ export async function createTaskAction(formData: FormData) {
     );
   }
 
-  const materialTitles = formData.getAll("material_title");
-  const materialUrls = formData.getAll("material_url");
-  const materialDescriptions = formData.getAll("material_description");
-  const materialTypes = formData.getAll("material_type");
-
-  const materials = materialTitles
-    .map((title, index) => ({
-      title: typeof title === "string" ? title.trim() : "",
-      url: typeof materialUrls[index] === "string" ? materialUrls[index].trim() : "",
-      description:
-        typeof materialDescriptions[index] === "string"
-          ? materialDescriptions[index].trim()
-          : "",
-      material_type:
-        typeof materialTypes[index] === "string" && materialTypes[index]
-          ? materialTypes[index]
-          : "link"
-    }))
-    .filter((material) => material.title && material.url)
-    .map((material) => ({
-      ...material,
-      task_id: task.id,
-      description: material.description || null,
-      created_by: profile.id
-    }));
-
-  if (materials.length) {
-    await supabase.from("task_materials").insert(materials);
-  }
-
   revalidatePath("/tasks");
   redirect(`/tasks/${task.id}`);
 }
@@ -117,9 +108,7 @@ export async function updateTaskStatusAction(taskId: string, formData: FormData)
   }
 
   const { error } = await supabase.from("tasks").update({ status }).eq("id", taskId);
-  if (error) {
-    throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
 
   revalidatePath(`/tasks/${taskId}`);
   revalidatePath("/tasks");
@@ -136,10 +125,7 @@ export async function addTaskCommentAction(taskId: string, formData: FormData) {
     content
   });
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
+  if (error) throw new Error(error.message);
   revalidatePath(`/tasks/${taskId}`);
 }
 
@@ -176,9 +162,7 @@ export async function updateTaskAdminAction(taskId: string, formData: FormData) 
 
   if (error) throw new Error(error.message);
 
-  const teacherIds = formData
-    .getAll("teacher_ids")
-    .filter((item): item is string => typeof item === "string" && item.length > 0);
+  const teacherIds = await resolveAssigneeIds(supabase, formData);
 
   const { data: existingAssignments } = await supabase
     .from("task_assignments")
@@ -186,7 +170,7 @@ export async function updateTaskAdminAction(taskId: string, formData: FormData) 
     .eq("task_id", taskId);
 
   const existingIds = new Set(
-    (existingAssignments || []).map((assignment) => assignment.teacher_id as string)
+    (existingAssignments || []).map((assignment: { teacher_id: string }) => assignment.teacher_id)
   );
   const nextIds = new Set(teacherIds);
   const toInsert = teacherIds.filter((id) => !existingIds.has(id));
@@ -259,11 +243,15 @@ export async function addChecklistItemAction(taskId: string, formData: FormData)
   const title = value(formData, "title");
   if (!title) return;
 
-  const position = Number(value(formData, "position") || 0);
+  const { count } = await supabase
+    .from("task_checklist_items")
+    .select("*", { count: "exact", head: true })
+    .eq("task_id", taskId);
+
   const { error } = await supabase.from("task_checklist_items").insert({
     task_id: taskId,
     title,
-    position,
+    position: count || 0,
     created_by: profile.id
   });
   if (error) throw new Error(error.message);
@@ -278,10 +266,9 @@ export async function updateChecklistItemAction(
   const { supabase } = await requireAdmin();
   const title = value(formData, "title");
   if (!title) return;
-  const position = Number(value(formData, "position") || 0);
   const { error } = await supabase
     .from("task_checklist_items")
-    .update({ title, position })
+    .update({ title })
     .eq("id", itemId)
     .eq("task_id", taskId);
   if (error) throw new Error(error.message);

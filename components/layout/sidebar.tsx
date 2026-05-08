@@ -10,7 +10,7 @@ export function Sidebar({ unreadNotifications }: { unreadNotifications: number }
   return (
     <aside className="hidden w-72 shrink-0 p-4 lg:block">
       <div className="sticky top-4 flex h-[calc(100vh-2rem)] flex-col rounded-[28px] border border-white/80 bg-white p-5 shadow-soft">
-        <Link href="/dashboard" className="mb-8 flex items-center gap-3">
+        <Link href="/dashboard" className="mb-7 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-lg font-bold text-white">
             N
           </div>
@@ -19,12 +19,13 @@ export function Sidebar({ unreadNotifications }: { unreadNotifications: number }
             <p className="text-xs text-slate-400">Workspace</p>
           </div>
         </Link>
-        <nav className="space-y-2">
+        <nav className="space-y-1.5">
           {workspaceNavigation.map((item) => {
             const Icon = item.icon;
             const active =
               pathname === item.href ||
-              (item.href !== "/dashboard" && pathname.startsWith(item.href));
+              (item.href !== "/dashboard" && pathname.startsWith(item.href)) ||
+              (item.href === "/tools" && ["/training", "/knowledge", "/notebooklm"].some((href) => pathname.startsWith(href)));
             return (
               <Link
                 key={item.href}
@@ -46,10 +47,8 @@ export function Sidebar({ unreadNotifications }: { unreadNotifications: number }
           })}
         </nav>
         <div className="mt-auto rounded-3xl bg-slate-50 p-4">
-          <p className="text-sm font-medium text-slate-950">Өнөөдрийн фокус</p>
-          <p className="mt-2 text-xs leading-5 text-slate-500">
-            Ажил, зарлал, материал, сургалтын холбоосоо нэг цонхноос хянаарай.
-          </p>
+          <p className="text-sm font-medium text-slate-950">Фокус</p>
+          <p className="mt-2 text-xs leading-5 text-slate-500">Ажил, note, tools.</p>
         </div>
       </div>
     </aside>

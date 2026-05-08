@@ -18,6 +18,24 @@ export type Profile = {
   updated_at: string;
 };
 
+export type TeacherGroup = {
+  id: string;
+  name: string;
+  description: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  teacher_group_members?: TeacherGroupMember[];
+};
+
+export type TeacherGroupMember = {
+  id: string;
+  group_id: string;
+  teacher_id: string;
+  created_at: string;
+  profiles?: Profile | null;
+};
+
 export type Task = {
   id: string;
   title: string;
@@ -131,4 +149,17 @@ export type Notification = {
   is_read: boolean;
   related_task_id: string | null;
   created_at: string;
+};
+
+export type Note = {
+  id: string;
+  title: string;
+  type: "text" | "audio";
+  audio_url: string | null;
+  content: string | null;
+  category: string;
+  is_shared: boolean;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 };

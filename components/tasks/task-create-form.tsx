@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Mic, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { materialTypeLabels, priorityLabels, statusLabels, taskCategories } from "@/lib/labels";
-import type { Profile } from "@/lib/types";
+import { priorityLabels, statusLabels, taskCategories } from "@/lib/labels";
+import type { Profile, TeacherGroup } from "@/lib/types";
 
 type SpeechRecognitionLike = {
   lang: string;
@@ -55,9 +55,7 @@ function inferDraft(text: string, teachers: Profile[]): Draft {
     ? "urgent"
     : lower.includes("өндөр")
       ? "high"
-      : lower.includes("энгийн")
-        ? "normal"
-        : "normal";
+      : "normal";
   const due_date = lower.includes("маргааш")
     ? dateString(1)
     : lower.includes("өнөөдөр")
@@ -66,7 +64,8 @@ function inferDraft(text: string, teachers: Profile[]): Draft {
   const teacherIds = teachers
     .filter((teacher) => {
       const name = (teacher.full_name || "").toLowerCase();
-      return name && lower.includes(name.replace("багш", "").trim());
+      const shortName = name.replace("багш", "").trim();
+      return name && (lower.includes(name) || lower.includes(shortName));
     })
     .map((teacher) => teacher.id);
 
@@ -82,9 +81,11 @@ function inferDraft(text: string, teachers: Profile[]): Draft {
 
 export function TaskCreateForm({
   teachers,
+  groups,
   action
 }: {
   teachers: Profile[];
+  groups: TeacherGroup[];
   action: (formData: FormData) => void;
 }) {
   const [draft, setDraft] = useState<Draft>({
@@ -99,6 +100,11 @@ export function TaskCreateForm({
   const [listening, setListening] = useState(false);
   const [fallbackOpen, setFallbackOpen] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
+
+  const selectedTeachers = useMemo(
+    () => new Set(draft.teacherIds),
+    [draft.teacherIds]
+  );
 
   useEffect(() => {
     const speechWindow = window as SpeechWindow;
@@ -135,26 +141,27 @@ export function TaskCreateForm({
   }
 
   return (
-    <form action={action} className="space-y-6">
+    <form action={action} className="space-y-5">
       <Card>
-        <CardHeader>
-          <CardTitle>Voice-р draft бэлдэх</CardTitle>
-          <CardDescription>
-            Дуугаар хэлсэн заавар шууд ажил үүсгэхгүй. Зөвхөн form бөглөж, админ өөрөө хянаад Үүсгэх дарна.
-          </CardDescription>
-        </CardHeader>
-        <div className="flex flex-wrap gap-3">
-          <Button type="button" onClick={startVoice} variant="outline">
-            <Mic className="h-4 w-4" />
-            {listening ? "Сонсож байна..." : "Voice-р ажил оруулах"}
-          </Button>
-          <Button type="button" variant="ghost" onClick={() => setFallbackOpen((open) => !open)}>
-            <Wand2 className="h-4 w-4" />
-            Draft үүсгэх
-          </Button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <CardHeader className="mb-0">
+            <CardTitle>Шинэ ажил</CardTitle>
+            <CardDescription>Гол мэдээллээ л бөглөнө.</CardDescription>
+          </CardHeader>
+          <div className="flex gap-2">
+            <Button type="button" onClick={startVoice} variant="outline">
+              <Mic className="h-4 w-4" />
+              {listening ? "Сонсож байна" : "Voice"}
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setFallbackOpen((open) => !open)}>
+              <Wand2 className="h-4 w-4" />
+              Draft
+            </Button>
+          </div>
         </div>
+
         {!speechSupported || fallbackOpen ? (
-          <div className="mt-4 space-y-3">
+          <div className="mt-4 space-y-3 rounded-3xl bg-slate-50 p-4">
             <Textarea
               value={voiceText}
               onChange={(event) => setVoiceText(event.target.value)}
@@ -168,10 +175,6 @@ export function TaskCreateForm({
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Шинэ ажил</CardTitle>
-          <CardDescription>30 секундэд бөглөхөд зориулагдсан энгийн form.</CardDescription>
-        </CardHeader>
         <div className="grid gap-4">
           <label className="space-y-2">
             <span className="text-sm font-medium text-slate-700">Ажлын нэр</span>
@@ -188,6 +191,7 @@ export function TaskCreateForm({
               name="description"
               value={draft.description}
               onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+              rows={4}
             />
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -219,8 +223,6 @@ export function TaskCreateForm({
                 ))}
               </Select>
             </label>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
             <label className="space-y-2">
               <span className="text-sm font-medium text-slate-700">Дуусах хугацаа</span>
               <Input
@@ -241,10 +243,9 @@ export function TaskCreateForm({
               </Select>
             </label>
           </div>
+
           <details className="rounded-3xl bg-slate-50 p-4">
-            <summary className="cursor-pointer text-sm font-medium text-slate-700">
-              Нэмэлт тохиргоо
-            </summary>
+            <summary className="cursor-pointer text-sm font-medium text-slate-700">Нэмэлт</summary>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <label className="space-y-2">
                 <span className="text-sm font-medium text-slate-700">Эхлэх огноо</span>
@@ -261,10 +262,20 @@ export function TaskCreateForm({
 
       <Card>
         <CardHeader>
-          <CardTitle>Хариуцах багш</CardTitle>
-          <CardDescription>Voice draft нэр таарвал автоматаар сонгож оролдоно.</CardDescription>
+          <CardTitle>Хариуцагч</CardTitle>
+          <CardDescription>Багш эсвэл баг сонгоно.</CardDescription>
         </CardHeader>
-        <div className="grid gap-3 sm:grid-cols-2">
+        {groups.length ? (
+          <div className="mb-4 grid gap-2 sm:grid-cols-2">
+            {groups.map((group) => (
+              <label key={group.id} className="flex items-center gap-3 rounded-2xl bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
+                <input name="group_ids" value={group.id} type="checkbox" className="h-4 w-4" />
+                {group.name}
+              </label>
+            ))}
+          </div>
+        ) : null}
+        <div className="grid gap-2 sm:grid-cols-2">
           {teachers.map((teacher) => (
             <label
               key={teacher.id}
@@ -274,7 +285,7 @@ export function TaskCreateForm({
                 name="teacher_ids"
                 value={teacher.id}
                 type="checkbox"
-                checked={draft.teacherIds.includes(teacher.id)}
+                checked={selectedTeachers.has(teacher.id)}
                 onChange={(event) => {
                   setDraft({
                     ...draft,
@@ -287,29 +298,6 @@ export function TaskCreateForm({
               />
               {teacher.full_name || teacher.id}
             </label>
-          ))}
-        </div>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Материалын линк</CardTitle>
-          <CardDescription>Хүсвэл эхний холбоосуудаа шууд нэмнэ.</CardDescription>
-        </CardHeader>
-        <div className="space-y-4">
-          {[0, 1, 2].map((index) => (
-            <div key={index} className="grid gap-3 rounded-3xl bg-slate-50 p-4 sm:grid-cols-2">
-              <Input name="material_title" placeholder="Материалын нэр" />
-              <Input name="material_url" placeholder="https://..." />
-              <Input name="material_description" placeholder="Тайлбар" />
-              <Select name="material_type" defaultValue="link">
-                {Object.entries(materialTypeLabels).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
-            </div>
           ))}
         </div>
       </Card>

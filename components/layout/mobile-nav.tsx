@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, BookOpen, CheckSquare, Home, Megaphone } from "lucide-react";
+import { Bell, CheckSquare, Home, NotebookTabs, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
   { href: "/dashboard", label: "Самбар", icon: Home },
   { href: "/tasks", label: "Ажил", icon: CheckSquare },
-  { href: "/announcements", label: "Зарлал", icon: Megaphone },
-  { href: "/training", label: "Сан", icon: BookOpen },
+  { href: "/tools", label: "Tools", icon: Wrench },
+  { href: "/notes", label: "Note", icon: NotebookTabs },
   { href: "/notifications", label: "Мэд.", icon: Bell }
 ];
 
@@ -22,7 +22,8 @@ export function MobileNav({ unreadNotifications }: { unreadNotifications: number
           const Icon = item.icon;
           const active =
             pathname === item.href ||
-            (item.href !== "/dashboard" && pathname.startsWith(item.href));
+            (item.href !== "/dashboard" && pathname.startsWith(item.href)) ||
+            (item.href === "/tools" && ["/training", "/knowledge", "/notebooklm"].some((href) => pathname.startsWith(href)));
           return (
             <Link
               key={item.href}

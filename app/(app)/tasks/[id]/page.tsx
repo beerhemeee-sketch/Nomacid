@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { CalendarDays, ListOrdered, MessageSquare, Paperclip, Users } from "lucide-react";
+import { CalendarDays, CheckCircle2, MessageSquare, Paperclip, Trash2, Users } from "lucide-react";
 import {
   addTaskCommentAction,
   addChecklistItemAction,
@@ -15,7 +15,7 @@ import {
 import { getSessionProfile } from "@/lib/auth/session";
 import { materialTypeLabels, priorityLabels, statusLabels, taskCategories } from "@/lib/labels";
 import { isAdmin } from "@/lib/permissions";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { MaterialCard } from "@/components/materials/material-card";
 import { PriorityBadge } from "@/components/tasks/priority-badge";
 import { TaskStatusBadge } from "@/components/tasks/status-badge";
@@ -25,7 +25,8 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { TaskWithRelations } from "@/lib/types";
+import type { Profile, TaskWithRelations, TeacherGroup } from "@/lib/types";
+import type { LucideIcon } from "lucide-react";
 
 export default async function TaskDetailPage({
   params
@@ -46,68 +47,76 @@ export default async function TaskDetailPage({
 
   if (!data) notFound();
   const task = data as unknown as TaskWithRelations;
-  const { data: teachersRaw } = admin
-    ? await supabase.from("profiles").select("*").eq("role", "teacher").order("full_name")
-    : { data: [] };
-  const teachers = teachersRaw || [];
-  const assignedIds = new Set(
-    task.task_assignments?.map((assignment) => assignment.teacher_id) || []
-  );
-  const checklist = [...(task.task_checklist_items || [])].sort(
-    (a, b) => a.position - b.position
-  );
+
+  const [{ data: teachersRaw }, { data: groupsRaw }] = admin
+    ? await Promise.all([
+        supabase.from("profiles").select("*").eq("role", "teacher").order("full_name"),
+        supabase.from("teacher_groups").select("*").order("name")
+      ])
+    : [{ data: [] }, { data: [] }];
+
+  const teachers = (teachersRaw || []) as Profile[];
+  const groups = (groupsRaw || []) as TeacherGroup[];
+  const assignedIds = new Set(task.task_assignments?.map((assignment) => assignment.teacher_id) || []);
+  const checklist = [...(task.task_checklist_items || [])].sort((a, b) => {
+    if (a.position !== b.position) return a.position - b.position;
+    return a.created_at.localeCompare(b.created_at);
+  });
   const doneCount = checklist.filter((item) => item.is_done).length;
   const assignedTeachers =
     task.task_assignments
       ?.map((assignment) => assignment.profiles?.full_name)
       .filter(Boolean)
-      .join(", ") || "Хариуцагч сонгоогүй";
+      .join(", ") || "Хариуцагчгүй";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <TaskStatusBadge status={task.status} />
               <PriorityBadge priority={task.priority} />
               <CategoryBadge category={task.category} />
             </div>
-            <h2 className="mt-4 text-3xl font-semibold tracking-normal text-slate-950">
+            <h2 className="mt-3 text-2xl font-semibold tracking-normal text-slate-950 sm:text-3xl">
               {task.title}
             </h2>
-            <p className="mt-3 max-w-3xl text-base leading-7 text-slate-500">
-              {task.description || "Тайлбар оруулаагүй байна."}
-            </p>
+            {task.description ? (
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500 sm:text-base">
+                {task.description}
+              </p>
+            ) : null}
           </div>
           {admin ? (
             <form action={deleteTaskAction.bind(null, task.id)}>
-              <Button type="submit" variant="destructive">
+              <Button type="submit" variant="destructive" size="sm">
+                <Trash2 className="h-4 w-4" />
                 Устгах
               </Button>
             </form>
           ) : null}
         </div>
-        <div className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
           <Info icon={Users} label="Хариуцагч" value={assignedTeachers} />
-          <Info icon={Paperclip} label="Ажлын төрөл" value={task.category || "Бусад"} />
-          <Info icon={ListOrdered} label="Дараалал" value={String(task.sequence_order)} />
+          <Info icon={Paperclip} label="Төрөл" value={task.category || "Бусад"} />
           <Info icon={CalendarDays} label="Эхлэх" value={formatDate(task.start_date)} />
           <Info icon={CalendarDays} label="Дуусах" value={formatDate(task.due_date)} />
+          <Info icon={CheckCircle2} label="Алхам" value={`${doneCount}/${checklist.length}`} />
         </div>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[0.7fr_1.3fr]">
-        <section className="space-y-6">
+      <div className="grid gap-5 xl:grid-cols-[0.75fr_1.25fr]">
+        <section className="space-y-5">
           <Card>
             <CardHeader>
-              <CardTitle>{admin ? "Ажил засах" : "Төлөв шинэчлэх"}</CardTitle>
-              <CardDescription>Одоогийн явцаа багтаа ойлгомжтой болгоно.</CardDescription>
+              <CardTitle>{admin ? "Ажил засах" : "Төлөв"}</CardTitle>
+              <CardDescription>{admin ? "Үндсэн мэдээлэл." : "Явцаа шинэчилнэ."}</CardDescription>
             </CardHeader>
             {admin ? (
               <form action={updateTaskAdminAction.bind(null, task.id)} className="space-y-4">
                 <Input name="title" defaultValue={task.title} required />
-                <Textarea name="description" defaultValue={task.description || ""} />
+                <Textarea name="description" defaultValue={task.description || ""} rows={4} />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Select name="category" defaultValue={task.category || "Бусад"}>
                     {taskCategories.map((category) => (
@@ -130,12 +139,32 @@ export default async function TaskDetailPage({
                       </option>
                     ))}
                   </Select>
-                  <Input name="start_date" type="date" defaultValue={task.start_date || ""} />
                   <Input name="due_date" type="date" defaultValue={task.due_date || ""} />
-                  <Input name="sequence_order" type="number" defaultValue={task.sequence_order} />
                 </div>
+                <details className="rounded-3xl bg-slate-50 p-4">
+                  <summary className="cursor-pointer text-sm font-medium text-slate-700">Нэмэлт</summary>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <Input name="start_date" type="date" defaultValue={task.start_date || ""} />
+                    <Input name="sequence_order" type="number" defaultValue={task.sequence_order} />
+                  </div>
+                </details>
+
+                {groups.length ? (
+                  <div className="rounded-3xl bg-indigo-50 p-4">
+                    <p className="mb-3 text-sm font-medium text-indigo-900">Баг оноох</p>
+                    <div className="grid gap-2">
+                      {groups.map((group) => (
+                        <label key={group.id} className="flex items-center gap-2 text-sm text-indigo-800">
+                          <input name="group_ids" value={group.id} type="checkbox" className="h-4 w-4" />
+                          {group.name}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="rounded-3xl bg-slate-50 p-4">
-                  <p className="mb-3 text-sm font-medium text-slate-700">Хариуцагчид</p>
+                  <p className="mb-3 text-sm font-medium text-slate-700">Багш нар</p>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {teachers.map((teacher) => (
                       <label key={teacher.id} className="flex items-center gap-2 text-sm text-slate-600">
@@ -171,10 +200,10 @@ export default async function TaskDetailPage({
             <Card>
               <CardHeader>
                 <CardTitle>Материал нэмэх</CardTitle>
-                <CardDescription>Ажилтай холбоотой файл, холбоос, эх сурвалж.</CardDescription>
+                <CardDescription>Холбоос, файл, эх сурвалж.</CardDescription>
               </CardHeader>
               <form action={addTaskMaterialAction.bind(null, task.id)} className="space-y-3">
-                <Input name="title" placeholder="Материалын нэр" required />
+                <Input name="title" placeholder="Нэр" required />
                 <Input name="url" placeholder="https://..." required />
                 <Input name="description" placeholder="Тайлбар" />
                 <Select name="material_type" defaultValue="link">
@@ -190,53 +219,40 @@ export default async function TaskDetailPage({
           ) : null}
         </section>
 
-        <section className="space-y-6">
+        <section className="space-y-5">
           <Card>
             <CardHeader>
               <CardTitle>Хийх алхмууд</CardTitle>
-              <CardDescription>
-                {checklist.length
-                  ? `${doneCount}/${checklist.length} дууссан`
-                  : "Алхам нэмэгдээгүй байна."}
-              </CardDescription>
+              <CardDescription>{checklist.length ? `${doneCount}/${checklist.length} дууссан` : "Алхам алга."}</CardDescription>
             </CardHeader>
-            <div className="space-y-3">
+            <div className="space-y-2">
               {checklist.map((item) =>
                 admin ? (
                   <form
                     key={item.id}
                     action={updateChecklistItemAction.bind(null, task.id, item.id)}
-                    className="grid gap-2 rounded-3xl bg-slate-50 p-3 sm:grid-cols-[1fr_90px_auto]"
+                    className="flex gap-2 rounded-2xl bg-slate-50 p-3"
                   >
                     <Input name="title" defaultValue={item.title} />
-                    <Input name="position" type="number" defaultValue={item.position} />
-                    <div className="flex gap-2">
-                      <Button type="submit" size="sm" variant="outline">
-                        Хадгалах
-                      </Button>
-                      <Button
-                        formAction={deleteChecklistItemAction.bind(null, task.id, item.id)}
-                        size="sm"
-                        variant="ghost"
-                      >
-                        Устгах
-                      </Button>
-                    </div>
+                    <Button type="submit" size="sm" variant="outline">Хадгалах</Button>
+                    <Button formAction={deleteChecklistItemAction.bind(null, task.id, item.id)} size="sm" variant="ghost">
+                      Устгах
+                    </Button>
                   </form>
                 ) : (
                   <form
                     key={item.id}
                     action={toggleChecklistItemAction.bind(null, task.id, item.id, item.is_done)}
-                    className="flex items-center gap-3 rounded-3xl bg-slate-50 p-4"
+                    className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3"
                   >
                     <button
                       type="submit"
                       className="flex h-5 w-5 items-center justify-center rounded-md border border-indigo-200 bg-white"
                       aria-label="Checklist toggle"
                     >
-                      {item.is_done ? "✓" : ""}
+                      {item.is_done ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : null}
                     </button>
-                    <span className={item.is_done ? "text-sm text-slate-400 line-through" : "text-sm text-slate-700"}>
+                    <span className={cn("text-sm", item.is_done ? "text-slate-400 line-through" : "text-slate-700")}>
                       {item.title}
                     </span>
                   </form>
@@ -244,12 +260,9 @@ export default async function TaskDetailPage({
               )}
             </div>
             {admin ? (
-              <form action={addChecklistItemAction.bind(null, task.id)} className="mt-4 grid gap-2 sm:grid-cols-[1fr_100px_auto]">
+              <form action={addChecklistItemAction.bind(null, task.id)} className="mt-4 flex gap-2">
                 <Input name="title" placeholder="Шинэ алхам" />
-                <Input name="position" type="number" defaultValue={checklist.length + 1} />
-                <Button type="submit" variant="outline">
-                  Үүсгэх
-                </Button>
+                <Button type="submit" variant="outline">Нэмэх</Button>
               </form>
             ) : null}
           </Card>
@@ -257,10 +270,9 @@ export default async function TaskDetailPage({
           <Card>
             <CardHeader>
               <CardTitle>Материалууд</CardTitle>
-              <CardDescription>Энэ ажлыг хийхэд хэрэгтэй холбоосууд.</CardDescription>
             </CardHeader>
             {task.task_materials?.length ? (
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-3 md:grid-cols-2">
                 {task.task_materials.map((material) => (
                   <div key={material.id} className="space-y-2">
                     <MaterialCard material={material} />
@@ -275,14 +287,14 @@ export default async function TaskDetailPage({
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-slate-500">Материал нэмэгдээгүй байна.</p>
+              <p className="text-sm text-slate-500">Материал алга.</p>
             )}
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Сэтгэгдэл</CardTitle>
-              <CardDescription>Асуулт, тодруулга, явцын тэмдэглэл.</CardDescription>
+              <CardTitle>Ажлын хэлэлцүүлэг</CardTitle>
+              <CardDescription>Асуулт, тодруулга, явц.</CardDescription>
             </CardHeader>
             <div className="space-y-3">
               {task.task_comments?.map((comment) => (
@@ -298,10 +310,10 @@ export default async function TaskDetailPage({
               ))}
             </div>
             <form action={addTaskCommentAction.bind(null, task.id)} className="mt-5 space-y-3">
-              <Textarea name="content" placeholder="Сэтгэгдэл бичих..." required />
+              <Textarea name="content" placeholder="Хэлэлцүүлэгт бичих..." required rows={3} />
               <Button type="submit">
                 <MessageSquare className="h-4 w-4" />
-                Хадгалах
+                Илгээх
               </Button>
             </form>
           </Card>
@@ -316,15 +328,13 @@ function Info({
   label,
   value
 }: {
-  icon: typeof Paperclip;
+  icon: LucideIcon;
   label: string;
   value: string;
 }) {
   return (
-    <div className="rounded-3xl bg-slate-50 p-4">
-      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-2xl bg-white text-indigo-500">
-        <Icon className="h-4 w-4" />
-      </div>
+    <div className="rounded-2xl bg-slate-50 p-3">
+      <Icon className="mb-2 h-4 w-4 text-indigo-500" />
       <p className="text-xs text-slate-400">{label}</p>
       <p className="mt-1 line-clamp-2 text-sm font-medium text-slate-800">{value}</p>
     </div>
