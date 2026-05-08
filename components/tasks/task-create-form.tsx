@@ -1,0 +1,322 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Mic, Wand2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { materialTypeLabels, priorityLabels, statusLabels, taskCategories } from "@/lib/labels";
+import type { Profile } from "@/lib/types";
+
+type SpeechRecognitionLike = {
+  lang: string;
+  interimResults: boolean;
+  start: () => void;
+  onstart: (() => void) | null;
+  onend: (() => void) | null;
+  onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null;
+};
+
+type SpeechWindow = Window & {
+  SpeechRecognition?: new () => SpeechRecognitionLike;
+  webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+};
+
+type Draft = {
+  title: string;
+  description: string;
+  category: string;
+  priority: string;
+  due_date: string;
+  teacherIds: string[];
+};
+
+function dateString(offset: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + offset);
+  return date.toISOString().slice(0, 10);
+}
+
+function inferDraft(text: string, teachers: Profile[]): Draft {
+  const lower = text.toLowerCase();
+  const category =
+    lower.includes("10-р төв") || lower.includes("10р төв")
+      ? "10-р төв"
+      : lower.includes("рийл") || lower.includes("reel")
+        ? "Рийл хийх"
+        : lower.includes("контент")
+          ? "Контент"
+          : lower.includes("сургалт")
+            ? "Сургалт"
+            : "Бусад";
+  const priority = lower.includes("яаралтай")
+    ? "urgent"
+    : lower.includes("өндөр")
+      ? "high"
+      : lower.includes("энгийн")
+        ? "normal"
+        : "normal";
+  const due_date = lower.includes("маргааш")
+    ? dateString(1)
+    : lower.includes("өнөөдөр")
+      ? dateString(0)
+      : "";
+  const teacherIds = teachers
+    .filter((teacher) => {
+      const name = (teacher.full_name || "").toLowerCase();
+      return name && lower.includes(name.replace("багш", "").trim());
+    })
+    .map((teacher) => teacher.id);
+
+  return {
+    title: text.split(/[.!?。]/)[0]?.trim().slice(0, 90) || "",
+    description: text,
+    category,
+    priority,
+    due_date,
+    teacherIds
+  };
+}
+
+export function TaskCreateForm({
+  teachers,
+  action
+}: {
+  teachers: Profile[];
+  action: (formData: FormData) => void;
+}) {
+  const [draft, setDraft] = useState<Draft>({
+    title: "",
+    description: "",
+    category: "Бусад",
+    priority: "normal",
+    due_date: "",
+    teacherIds: []
+  });
+  const [voiceText, setVoiceText] = useState("");
+  const [listening, setListening] = useState(false);
+  const [fallbackOpen, setFallbackOpen] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+
+  useEffect(() => {
+    const speechWindow = window as SpeechWindow;
+    setSpeechSupported(
+      Boolean(speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition)
+    );
+  }, []);
+
+  function applyDraft(text: string) {
+    const next = inferDraft(text, teachers);
+    setDraft(next);
+    setVoiceText(text);
+  }
+
+  function startVoice() {
+    const speechWindow = window as SpeechWindow;
+    const Recognition = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
+    if (!Recognition) {
+      setFallbackOpen(true);
+      return;
+    }
+    const recognition = new Recognition();
+    recognition.lang = "mn-MN";
+    recognition.interimResults = false;
+    recognition.onstart = () => setListening(true);
+    recognition.onend = () => setListening(false);
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((result) => result[0].transcript)
+        .join(" ");
+      applyDraft(transcript);
+    };
+    recognition.start();
+  }
+
+  return (
+    <form action={action} className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Voice-р draft бэлдэх</CardTitle>
+          <CardDescription>
+            Дуугаар хэлсэн заавар шууд ажил үүсгэхгүй. Зөвхөн form бөглөж, админ өөрөө хянаад Үүсгэх дарна.
+          </CardDescription>
+        </CardHeader>
+        <div className="flex flex-wrap gap-3">
+          <Button type="button" onClick={startVoice} variant="outline">
+            <Mic className="h-4 w-4" />
+            {listening ? "Сонсож байна..." : "Voice-р ажил оруулах"}
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => setFallbackOpen((open) => !open)}>
+            <Wand2 className="h-4 w-4" />
+            Draft үүсгэх
+          </Button>
+        </div>
+        {!speechSupported || fallbackOpen ? (
+          <div className="mt-4 space-y-3">
+            <Textarea
+              value={voiceText}
+              onChange={(event) => setVoiceText(event.target.value)}
+              placeholder="Жишээ: Маргааш Ариун багш 10-р төвийн бэлтгэл шалгах яаралтай ажил..."
+            />
+            <Button type="button" variant="outline" onClick={() => applyDraft(voiceText)}>
+              Draft үүсгэх
+            </Button>
+          </div>
+        ) : null}
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Шинэ ажил</CardTitle>
+          <CardDescription>30 секундэд бөглөхөд зориулагдсан энгийн form.</CardDescription>
+        </CardHeader>
+        <div className="grid gap-4">
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Ажлын нэр</span>
+            <Input
+              name="title"
+              required
+              value={draft.title}
+              onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+            />
+          </label>
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">Тайлбар</span>
+            <Textarea
+              name="description"
+              value={draft.description}
+              onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+            />
+          </label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-slate-700">Ажлын төрөл</span>
+              <Select
+                name="category"
+                value={draft.category}
+                onChange={(event) => setDraft({ ...draft, category: event.target.value })}
+              >
+                {taskCategories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-slate-700">Яаралтай эсэх</span>
+              <Select
+                name="priority"
+                value={draft.priority}
+                onChange={(event) => setDraft({ ...draft, priority: event.target.value })}
+              >
+                {Object.entries(priorityLabels).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-slate-700">Дуусах хугацаа</span>
+              <Input
+                name="due_date"
+                type="date"
+                value={draft.due_date}
+                onChange={(event) => setDraft({ ...draft, due_date: event.target.value })}
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-medium text-slate-700">Төлөв</span>
+              <Select name="status" defaultValue="new">
+                {Object.entries(statusLabels).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          </div>
+          <details className="rounded-3xl bg-slate-50 p-4">
+            <summary className="cursor-pointer text-sm font-medium text-slate-700">
+              Нэмэлт тохиргоо
+            </summary>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <label className="space-y-2">
+                <span className="text-sm font-medium text-slate-700">Эхлэх огноо</span>
+                <Input name="start_date" type="date" />
+              </label>
+              <label className="space-y-2">
+                <span className="text-sm font-medium text-slate-700">Дараалал</span>
+                <Input name="sequence_order" type="number" defaultValue={0} />
+              </label>
+            </div>
+          </details>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Хариуцах багш</CardTitle>
+          <CardDescription>Voice draft нэр таарвал автоматаар сонгож оролдоно.</CardDescription>
+        </CardHeader>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {teachers.map((teacher) => (
+            <label
+              key={teacher.id}
+              className="flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700"
+            >
+              <input
+                name="teacher_ids"
+                value={teacher.id}
+                type="checkbox"
+                checked={draft.teacherIds.includes(teacher.id)}
+                onChange={(event) => {
+                  setDraft({
+                    ...draft,
+                    teacherIds: event.target.checked
+                      ? [...draft.teacherIds, teacher.id]
+                      : draft.teacherIds.filter((id) => id !== teacher.id)
+                  });
+                }}
+                className="h-4 w-4"
+              />
+              {teacher.full_name || teacher.id}
+            </label>
+          ))}
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Материалын линк</CardTitle>
+          <CardDescription>Хүсвэл эхний холбоосуудаа шууд нэмнэ.</CardDescription>
+        </CardHeader>
+        <div className="space-y-4">
+          {[0, 1, 2].map((index) => (
+            <div key={index} className="grid gap-3 rounded-3xl bg-slate-50 p-4 sm:grid-cols-2">
+              <Input name="material_title" placeholder="Материалын нэр" />
+              <Input name="material_url" placeholder="https://..." />
+              <Input name="material_description" placeholder="Тайлбар" />
+              <Select name="material_type" defaultValue="link">
+                {Object.entries(materialTypeLabels).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <div className="flex justify-end">
+        <Button type="submit">Үүсгэх</Button>
+      </div>
+    </form>
+  );
+}

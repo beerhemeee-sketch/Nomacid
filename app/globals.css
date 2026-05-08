@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 220 33% 97%;
+  --foreground: 224 36% 13%;
+  --card: 0 0% 100%;
+  --card-foreground: 224 36% 13%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 224 36% 13%;
+  --primary: 232 72% 58%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 25% 94%;
+  --secondary-foreground: 224 26% 20%;
+  --muted: 220 22% 94%;
+  --muted-foreground: 221 12% 45%;
+  --accent: 225 82% 95%;
+  --accent-foreground: 232 56% 34%;
+  --destructive: 0 78% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 22% 90%;
+  --input: 220 22% 90%;
+  --ring: 232 72% 58%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+body {
+  min-height: 100vh;
+  background: #f4f6fb;
+  color: hsl(var(--foreground));
+}
+
+a {
+  text-decoration: none;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+}
