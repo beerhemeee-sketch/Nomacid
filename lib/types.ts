@@ -163,3 +163,29 @@ export type Note = {
   created_at: string;
   updated_at: string;
 };
+
+export type MeetingRoom = {
+  id: string;
+  title: string;
+  description: string | null;
+  room_slug: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  is_premium: boolean;
+  price_mnt: number | null;
+  checkout_url: string | null;
+  replay_url: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UserSubscription = {
+  id: string;
+  user_id: string;
+  plan: "free" | "premium";
+  status: "active" | "trialing" | "past_due" | "cancelled";
+  current_period_end: string | null;
+  created_at: string;
+  updated_at: string;
+};
